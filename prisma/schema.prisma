@@ -1,0 +1,147 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                      String   @id @default(cuid())
+  name                    String?
+  email                   String   @unique
+  avatar                  String?
+  level                   Int      @default(1)
+  points                  Int      @default(0)
+  streakDays              Int      @default(0)
+  longestStreak           Int      @default(0)
+  isOnboarded             Boolean  @default(false)
+  motivations             String   @default("")
+  dailyReminderEnabled    Boolean  @default(true)
+  dailyReminderTime       String   @default("09:00")
+  emergencyModeEnabled    Boolean  @default(true)
+  pin                     String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  addictions   Addiction[]
+  badges       Badge[]
+  challenges   Challenge[]
+  journalEntries JournalEntry[]
+  dailyActions DailyAction[]
+}
+
+model Addiction {
+  id             String   @id @default(cuid())
+  userId         String
+  name           String
+  type           String   @default("OTHER")
+  icon           String   @default("🎯")
+  color          String   @default("#6366f1")
+  level          String   @default("LIGHT")
+  goalType       String   @default("REDUCE")
+  targetQuantity Float    @default(0)
+  unit           String   @default("units")
+  costPerUnit    Float    @default(0)
+  startQuantity  Float    @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  consumptions Consumption[]
+  challenges   Challenge[]
+
+  @@index([userId])
+}
+
+model Consumption {
+  id          String   @id @default(cuid())
+  addictionId String
+  date        String
+  quantity    Float
+  time        String   @default("00:00")
+  context     String   @default("OTHER")
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  addiction Addiction @relation(fields: [addictionId], references: [id], onDelete: Cascade)
+
+  @@index([addictionId])
+  @@index([date])
+}
+
+model Badge {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String
+  name        String
+  description String
+  icon        String   @default("🏆")
+  earnedAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+  @@index([userId])
+}
+
+model Challenge {
+  id              String    @id @default(cuid())
+  userId          String
+  addictionId     String?
+  type            String
+  title           String
+  description     String
+  targetDays      Int       @default(7)
+  progressDays    Int       @default(0)
+  targetReduction Float?
+  currentReduction Float?
+  status          String    @default("ACTIVE")
+  startDate       DateTime  @default(now())
+  endDate         DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addiction Addiction? @relation(fields: [addictionId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([addictionId])
+}
+
+model JournalEntry {
+  id          String   @id @default(cuid())
+  userId      String
+  date        String
+  mood        String   @default("OKAY")
+  energyLevel Int      @default(3)
+  stressLevel Int      @default(3)
+  notes       String?
+  cravings    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId])
+  @@index([date])
+}
+
+model DailyAction {
+  id        String   @id @default(cuid())
+  userId    String
+  date      String
+  actionType String  @default("EXERCISE")
+  completed Boolean  @default(false)
+  duration  Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([date])
+}
