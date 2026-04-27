@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
+import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,8 +20,15 @@ export const metadata: Metadata = {
   description: "Application de suivi et réduction des addictions. Reprends le contrôle de ta vie, un jour à la fois.",
   keywords: ["addiction", "santé", "bien-être", "sevrage", "réduction", "suivi", "motivation"],
   authors: [{ name: "Libera Team" }],
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Libera",
+  },
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/icon-192x192.png",
+    apple: "/icon-192x192.png",
   },
   openGraph: {
     title: "Libera - Reprends le Contrôle",
@@ -58,6 +66,7 @@ export default function RootLayout({
         >
           {children}
           <Toaster />
+          <ServiceWorkerRegistrar />
         </ThemeProvider>
       </body>
     </html>
