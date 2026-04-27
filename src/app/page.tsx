@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { useAppData } from "@/hooks/use-app-data";
+import { offlineStore } from "@/lib/offline-store";
 import OnboardingFlow from "@/components/onboarding/OnboardingFlow";
 import DashboardView from "@/components/dashboard/DashboardView";
 import TrackingView from "@/components/tracking/TrackingView";
@@ -11,6 +12,8 @@ import CoachingView from "@/components/coaching/CoachingView";
 import ProfileView from "@/components/profile/ProfileView";
 import BottomNav from "@/components/shared/BottomNav";
 import PinLockScreen from "@/components/shared/PinLockScreen";
+import OfflineBanner from "@/components/shared/OfflineBanner";
+import OnlineSyncBanner from "@/components/shared/OnlineSyncBanner";
 import EmergencyMode from "@/components/emergency/EmergencyMode";
 import { AnimatePresence, motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
@@ -28,6 +31,9 @@ export default function HomePage() {
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const isEmergencyMode = useAppStore((s) => s.isEmergencyMode);
   const badges = useAppStore((s) => s.badges);
+
+  // Check both localStorage and API for onboarding status
+  const isOnboarded = user?.isOnboarded || offlineStore.isOnboarded();
 
   const earnedBadgeCount = badges.length;
   const [isPinVerified, setIsPinVerified] = useState(true);
@@ -66,7 +72,7 @@ export default function HomePage() {
   }
 
   // Onboarding flow for new users
-  if (!user?.isOnboarded) {
+  if (!isOnboarded) {
     return <OnboardingFlow />;
   }
 
@@ -128,6 +134,10 @@ export default function HomePage() {
       <AnimatePresence>
         {isEmergencyMode && <EmergencyMode />}
       </AnimatePresence>
+
+      {/* Offline / Sync banners */}
+      <OfflineBanner />
+      <OnlineSyncBanner />
     </div>
   );
 }

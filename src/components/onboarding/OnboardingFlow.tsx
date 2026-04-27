@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft,
@@ -11,6 +11,9 @@ import {
   Heart,
   Flag,
   Loader2,
+  Lock,
+  ShieldCheck,
+  ShieldX,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -82,16 +85,45 @@ export default function OnboardingFlow() {
   const [direction, setDirection] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Step 2 state
+  // Step 1 state
   const [name, setName] = useState('');
   const [selectedMotivations, setSelectedMotivations] = useState<string[]>([]);
 
-  // Step 3 state
+  // Step 2 state
   const [selectedAddictions, setSelectedAddictions] = useState<AddictionSelection[]>([]);
+
+  // Step 3 - PIN state
+  const [pinEnabled, setPinEnabled] = useState(false);
+  const [pinDigits, setPinDigits] = useState<string[]>(['', '', '', '']);
+  const [confirmPinDigits, setConfirmPinDigits] = useState<string[]>(['', '', '', '']);
+  const [pinConfirmed, setPinConfirmed] = useState(false);
+  const [showConfirmStep, setShowConfirmStep] = useState(false);
+  const [pinError, setPinError] = useState(false);
 
   const { setUser, setAddictions, addAddiction } = useAppStore();
 
-  const totalSteps = 4;
+  const totalSteps = 5;
+
+  // PIN input refs
+  const pinInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const confirmPinInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // Auto-focus first PIN input when step becomes visible
+  useEffect(() => {
+    if (currentStep === 3 && pinEnabled && !showConfirmStep && !pinConfirmed) {
+      setTimeout(() => {
+        pinInputRefs.current[0]?.focus();
+      }, 300);
+    }
+  }, [currentStep, pinEnabled, showConfirmStep, pinConfirmed]);
+
+  useEffect(() => {
+    if (currentStep === 3 && pinEnabled && showConfirmStep && !pinConfirmed) {
+      setTimeout(() => {
+        confirmPinInputRefs.current[0]?.focus();
+      }, 300);
+    }
+  }, [currentStep, pinEnabled, showConfirmStep, pinConfirmed]);
 
   // ---- Navigation ----
 
@@ -147,6 +179,126 @@ export default function OnboardingFlow() {
     []
   );
 
+  // ---- PIN helpers ----
+
+  const handlePinChange = useCallback(
+    (index: number, value: string, isConfirm: boolean) => {
+      const digit = value.replace(/\D/g, '').slice(-1);
+      if (digit === '') {
+        // Allow clearing
+        if (isConfirm) {
+          setConfirmPinDigits((prev) => {
+            const next = [...prev];
+            next[index] = '';
+            return next;
+          });
+        } else {
+          setPinDigits((prev) => {
+            const next = [...prev];
+            next[index] = '';
+            return next;
+          });
+        }
+        return;
+      }
+
+      if (isConfirm) {
+        setConfirmPinDigits((prev) => {
+          const next = [...prev];
+          next[index] = digit;
+          return next;
+        });
+        // Move to next input
+        if (index < 3) {
+          setTimeout(() => confirmPinInputRefs.current[index + 1]?.focus(), 50);
+        } else {
+          // All 4 digits entered - check match
+          const newConfirm = [...confirmPinDigits];
+          newConfirm[index] = digit;
+          const confirmCode = newConfirm.join('');
+          const originalCode = pinDigits.join('');
+          if (confirmCode === originalCode) {
+            setPinConfirmed(true);
+            setPinError(false);
+          } else {
+            setPinError(true);
+            // Reset after a delay
+            setTimeout(() => {
+              setConfirmPinDigits(['', '', '', '']);
+              setPinDigits(['', '', '', '']);
+              setShowConfirmStep(false);
+              setPinError(false);
+              setTimeout(() => pinInputRefs.current[0]?.focus(), 100);
+            }, 1200);
+          }
+        }
+      } else {
+        setPinDigits((prev) => {
+          const next = [...prev];
+          next[index] = digit;
+          return next;
+        });
+        // Move to next input
+        if (index < 3) {
+          setTimeout(() => pinInputRefs.current[index + 1]?.focus(), 50);
+        } else {
+          // All 4 digits entered - move to confirm step
+          setTimeout(() => {
+            setShowConfirmStep(true);
+          }, 200);
+        }
+      }
+    },
+    [pinDigits, confirmPinDigits]
+  );
+
+  const handlePinKeyDown = useCallback(
+    (index: number, e: React.KeyboardEvent<HTMLInputElement>, isConfirm: boolean) => {
+      if (e.key === 'Backspace') {
+        const currentDigits = isConfirm ? confirmPinDigits : pinDigits;
+        if (currentDigits[index] === '' && index > 0) {
+          // Move to previous input and clear it
+          if (isConfirm) {
+            setConfirmPinDigits((prev) => {
+              const next = [...prev];
+              next[index - 1] = '';
+              return next;
+            });
+            confirmPinInputRefs.current[index - 1]?.focus();
+          } else {
+            setPinDigits((prev) => {
+              const next = [...prev];
+              next[index - 1] = '';
+              return next;
+            });
+            pinInputRefs.current[index - 1]?.focus();
+          }
+        }
+      }
+    },
+    [pinDigits, confirmPinDigits]
+  );
+
+  const togglePinEnabled = useCallback(() => {
+    if (pinEnabled) {
+      // Disable PIN - reset all PIN state
+      setPinEnabled(false);
+      setPinDigits(['', '', '', '']);
+      setConfirmPinDigits(['', '', '', '']);
+      setPinConfirmed(false);
+      setShowConfirmStep(false);
+      setPinError(false);
+    } else {
+      // Enable PIN
+      setPinEnabled(true);
+      setPinDigits(['', '', '', '']);
+      setConfirmPinDigits(['', '', '', '']);
+      setPinConfirmed(false);
+      setShowConfirmStep(false);
+      setPinError(false);
+    }
+  }, [pinEnabled]);
+
   // ---- Submit ----
 
   const handleSubmit = useCallback(async () => {
@@ -154,6 +306,7 @@ export default function OnboardingFlow() {
     try {
       const userId = 'user-1';
       const motivationsStr = selectedMotivations.join(',');
+      const pin = pinEnabled && pinConfirmed ? pinDigits.join('') : null;
 
       // 1. POST /api/user
       const userRes = await fetch('/api/user', {
@@ -165,6 +318,7 @@ export default function OnboardingFlow() {
           email: 'utilisateur@libera.app',
           motivations: motivationsStr,
           isOnboarded: true,
+          pin,
         }),
       });
       const userData = await userRes.json();
@@ -200,14 +354,22 @@ export default function OnboardingFlow() {
       }
       setAddictions(createdAddictions);
 
-      // 4. Navigate to dashboard
+      // 4. Save onboarding completion to localStorage
+      localStorage.setItem('libera_is_onboarded', 'true');
+
+      // 5. Save PIN to localStorage if set
+      if (pin) {
+        localStorage.setItem('libera_user_pin', pin);
+      }
+
+      // 6. Navigate to dashboard
       window.location.href = '/';
     } catch (error) {
       console.error('[Onboarding] Submission failed:', error);
     } finally {
       setIsSubmitting(false);
     }
-  }, [name, selectedMotivations, selectedAddictions, setUser, setAddictions]);
+  }, [name, selectedMotivations, selectedAddictions, pinEnabled, pinConfirmed, pinDigits, setUser, setAddictions]);
 
   // ===== Progress Indicator =====
 
@@ -230,7 +392,7 @@ export default function OnboardingFlow() {
     );
   }
 
-  // ===== Step 1 - Welcome =====
+  // ===== Step 0 - Welcome =====
 
   function WelcomeStep() {
     return (
@@ -303,7 +465,7 @@ export default function OnboardingFlow() {
     );
   }
 
-  // ===== Step 2 - Profile =====
+  // ===== Step 1 - Profile =====
 
   function ProfileStep() {
     return (
@@ -384,7 +546,7 @@ export default function OnboardingFlow() {
     );
   }
 
-  // ===== Step 3 - Addictions =====
+  // ===== Step 2 - Addictions =====
 
   function AddictionsStep() {
     const addictionEntries = Object.entries(ADDICTION_CONFIGS) as [AddictionType, typeof ADDICTION_CONFIGS[AddictionType]][];
@@ -610,9 +772,146 @@ export default function OnboardingFlow() {
     );
   }
 
+  // ===== Step 3 - PIN Setup =====
+
+  function PinSetupStep() {
+    return (
+      <div className="flex flex-col gap-6 px-4 py-2">
+        <div className="text-center mb-2">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/40 mb-4">
+            <Lock className="size-8 text-emerald-600 dark:text-emerald-400" />
+          </div>
+          <h2 className="text-2xl font-bold text-foreground">Sécuriser l&apos;accès</h2>
+          <p className="text-muted-foreground text-sm mt-1">
+            Protège ton application avec un code PIN à 4 chiffres (optionnel)
+          </p>
+        </div>
+
+        {/* PIN Toggle */}
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={togglePinEnabled}
+            className={`
+              inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold
+              transition-all duration-200 border-2 shadow-sm
+              ${
+                pinEnabled
+                  ? 'bg-emerald-100 border-emerald-500 text-emerald-700 dark:bg-emerald-900/40 dark:border-emerald-400 dark:text-emerald-300'
+                  : 'bg-card border-muted text-muted-foreground hover:border-emerald-300 hover:text-emerald-600 dark:hover:border-emerald-700 dark:hover:text-emerald-400'
+              }
+            `}
+          >
+            <Lock className="size-4" />
+            {pinEnabled ? 'Désactiver le code PIN' : 'Activer le code PIN'}
+          </button>
+        </div>
+
+        {/* PIN Input Area */}
+        <AnimatePresence mode="wait">
+          {pinEnabled && !pinConfirmed && !pinError && (
+            <motion.div
+              key={showConfirmStep ? 'confirm' : 'choose'}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className="flex flex-col items-center gap-4"
+            >
+              <p className="text-sm font-medium text-foreground">
+                {showConfirmStep ? 'Confirme ton code' : 'Choisis ton code'}
+              </p>
+              <div className="flex gap-3">
+                {(showConfirmStep ? confirmPinDigits : pinDigits).map((digit, index) => (
+                  <input
+                    key={`${showConfirmStep ? 'confirm' : 'pin'}-${index}`}
+                    ref={(el) => {
+                      if (showConfirmStep) {
+                        confirmPinInputRefs.current[index] = el;
+                      } else {
+                        pinInputRefs.current[index] = el;
+                      }
+                    }}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handlePinChange(index, e.target.value, showConfirmStep)}
+                    onKeyDown={(e) => handlePinKeyDown(index, e, showConfirmStep)}
+                    className={`
+                      w-14 h-16 text-center text-2xl font-bold rounded-xl border-2
+                      transition-all duration-200 outline-none
+                      ${
+                        digit
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                          : 'border-muted bg-card text-foreground focus:border-emerald-400'
+                      }
+                    `}
+                  />
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {pinError && (
+            <motion.div
+              key="error"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.3 }}
+              className="flex flex-col items-center gap-3"
+            >
+              <div className="flex items-center justify-center w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/30">
+                <ShieldX className="size-7 text-red-600 dark:text-red-400" />
+              </div>
+              <p className="text-sm font-semibold text-red-600 dark:text-red-400">
+                Les codes ne correspondent pas
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Réessaie en choisissant un nouveau code...
+              </p>
+            </motion.div>
+          )}
+
+          {pinConfirmed && (
+            <motion.div
+              key="confirmed"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.3 }}
+              className="flex flex-col items-center gap-3"
+            >
+              <div className="flex items-center justify-center w-14 h-14 rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+                <ShieldCheck className="size-7 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                Code défini !
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Info text when PIN is disabled */}
+        {!pinEnabled && (
+          <div className="text-center py-6">
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Tu peux activer le code PIN plus tard dans les paramètres.
+              <br />
+              Cela empêchera les accès non autorisés à tes données.
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // ===== Step 4 - Summary =====
 
   function SummaryStep() {
+    const isPinSet = pinEnabled && pinConfirmed;
+
     return (
       <div className="flex flex-col gap-6 px-4 py-2">
         <div className="text-center mb-2">
@@ -640,6 +939,22 @@ export default function OnboardingFlow() {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Email</span>
                 <span className="font-medium">utilisateur@libera.app</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Sécurité</span>
+                <span className={`inline-flex items-center gap-1.5 font-medium ${isPinSet ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>
+                  {isPinSet ? (
+                    <>
+                      <ShieldCheck className="size-4" />
+                      Code PIN activé
+                    </>
+                  ) : (
+                    <>
+                      <ShieldX className="size-4" />
+                      Non sécurisé
+                    </>
+                  )}
+                </span>
               </div>
             </div>
             {selectedMotivations.length > 0 && (
@@ -807,7 +1122,8 @@ export default function OnboardingFlow() {
             {currentStep === 0 && <WelcomeStep />}
             {currentStep === 1 && <ProfileStep />}
             {currentStep === 2 && <AddictionsStep />}
-            {currentStep === 3 && <SummaryStep />}
+            {currentStep === 3 && <PinSetupStep />}
+            {currentStep === 4 && <SummaryStep />}
           </motion.div>
         </AnimatePresence>
       </div>
